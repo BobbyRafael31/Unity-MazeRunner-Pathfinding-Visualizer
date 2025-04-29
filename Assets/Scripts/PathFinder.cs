@@ -1065,7 +1065,7 @@ namespace PathFinding
 
         // Flag untuk batch processing
         private bool processingBatch = false;
-        private List<Node<T>> neighborBatch = new List<Node<T>>(8);
+        private List<Node<T>> neighborBatch = new List<Node<T>>(4);
 
         /// <summary>
         /// Implementasi spesifik algoritma Greedy untuk memproses node tetangga
@@ -1079,6 +1079,7 @@ namespace PathFinding
 
             // Hitung biaya G yang sebenarnya (jarak dari start)
             float G = CurrentNode.GCost + NodeTraversalCost(CurrentNode.Location.Value, cell.Value);
+            float H;
 
             // Periksa apakah node sudah ada di open list
             PathFinderNode existingNode = null;
@@ -1087,7 +1088,7 @@ namespace PathFinding
             if (!nodeExists)
             {
                 // Hitung heuristik dengan normal
-                float H;
+
                 if (EqualityComparer<T>.Default.Equals(cell.Value, Goal.Value))
                 {
                     // Langsung ke tujuan - prioritaskan dengan H = 0
@@ -1101,10 +1102,11 @@ namespace PathFinding
                 // Buat node dan tambahkan ke open list - gunakan G yang benar
                 PathFinderNode n = new PathFinderNode(cell, CurrentNode, G, H);
                 openList.Enqueue(n);
+                onAddToOpenList?.Invoke(n);
                 openSet[cell.Value] = n;
 
-                if (!processingBatch && onAddToOpenList != null)
-                    onAddToOpenList.Invoke(n);
+                //if (!processingBatch && onAddToOpenList != null)
+                //    onAddToOpenList.Invoke(n);
             }
             else if (G < existingNode.GCost)
             {
@@ -1117,10 +1119,11 @@ namespace PathFinding
                 // Jika kita menggunakan G sebagai tie-breaker, maka perlu update prioritas
                 // karena G yang lebih rendah sekarang bisa mempengaruhi urutan priority queue
                 openList.UpdatePriority(existingNode, existingNode.HCost);
+                onAddToOpenList.Invoke(existingNode);
 
                 // Callback untuk UI
-                if (!processingBatch && onAddToOpenList != null)
-                    onAddToOpenList.Invoke(existingNode);
+                //if (!processingBatch && onAddToOpenList != null)
+
             }
         }
 
@@ -1161,7 +1164,7 @@ namespace PathFinding
             neighborBatch.AddRange(CurrentNode.Location.GetNeighbours());
 
             // Proses tetangga dalam batch untuk mengurangi callback overhead
-            processingBatch = neighborBatch.Count > 5; // Gunakan batch hanya jika cukup banyak tetangga
+            // processingBatch = neighborBatch.Count > 5; // Gunakan batch hanya jika cukup banyak tetangga
 
             foreach (Node<T> cell in neighborBatch)
             {

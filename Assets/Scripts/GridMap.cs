@@ -23,7 +23,14 @@ public class GridMap : MonoBehaviour
 
     // Mengizinkan atau melarang pergerakan diagonal pada pathfinding
     [SerializeField]
-    bool allowDiagonalMovement = true;
+    bool allowDiagonalMovement = false;
+
+    // Properti publik untuk mengakses allowDiagonalMovement dari luar
+    public bool AllowDiagonalMovement
+    {
+        get { return allowDiagonalMovement; }
+        set { allowDiagonalMovement = value; }
+    }
 
     // Warna-warna untuk representasi visual berbagai status node
     public Color COLOR_WALKABLE = new Color(0.4f, 0.4f, 0.8f, 1.0f);   // Warna untuk node yang dapat dilalui

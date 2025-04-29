@@ -20,6 +20,14 @@ public class PathfindingUIManager : MonoBehaviour
     public TMP_Dropdown algorithmDropdown;
     public Button runPathfindingButton;
     public Button resetButton;
+    public Toggle allowDiagonalToggle; // Toggle untuk diagonal movement
+
+    [Header("Visualization Controls")]
+    public Slider visualizationSpeedSlider;
+    public Slider visualizationBatchSlider;
+    // public Toggle showVisualizationToggle;
+    public TMP_Text speedValueText;
+    public TMP_Text batchValueText;
 
     [Header("Performance Metrics")]
     public TMP_Text timeEstimateText;
@@ -68,11 +76,27 @@ public class PathfindingUIManager : MonoBehaviour
         if (generateMazeButton != null)
             generateMazeButton.onClick.AddListener(OnGenerateMaze);
 
+        // Add visualization control listeners
+        if (visualizationSpeedSlider != null)
+            visualizationSpeedSlider.onValueChanged.AddListener(OnVisualizationSpeedChanged);
+
+        if (visualizationBatchSlider != null)
+            visualizationBatchSlider.onValueChanged.AddListener(OnVisualizationBatchChanged);
+
+        //if (showVisualizationToggle != null)
+        //{
+        //    showVisualizationToggle.isOn = npc.showVisualization;
+        //    showVisualizationToggle.onValueChanged.AddListener(OnShowVisualizationChanged);
+        //}
+
         // Subscribe to NPC's pathfinding events
         npc.OnPathfindingComplete += UpdatePerformanceMetrics;
 
         // Initialize performance metrics
         ClearPerformanceMetrics();
+
+        // Initialize visualization controls
+        InitializeVisualizationControls();
 
         // Perform algorithm warmup
         if (performWarmup)
@@ -190,6 +214,12 @@ public class PathfindingUIManager : MonoBehaviour
         {
             npc.OnPathfindingComplete -= UpdatePerformanceMetrics;
         }
+
+        // Unsubscribe from UI events
+        if (allowDiagonalToggle != null)
+        {
+            allowDiagonalToggle.onValueChanged.RemoveListener(OnDiagonalMovementChanged);
+        }
     }
 
     private void InitializeUI()
@@ -207,6 +237,13 @@ public class PathfindingUIManager : MonoBehaviour
             "Backtracking",
             "BFS"
         });
+
+        // Initialize diagonal movement toggle
+        if (allowDiagonalToggle != null)
+        {
+            allowDiagonalToggle.isOn = gridMap.AllowDiagonalMovement;
+            allowDiagonalToggle.onValueChanged.AddListener(OnDiagonalMovementChanged);
+        }
 
         // Setup maze size dropdown
         if (mazeSizeDropdown != null)
@@ -487,5 +524,66 @@ public class PathfindingUIManager : MonoBehaviour
 #endif
 
         Debug.Log("Application exit requested");
+    }
+
+    private void InitializeVisualizationControls()
+    {
+        // Set initial slider values based on NPC settings
+        if (visualizationSpeedSlider != null)
+        {
+            visualizationSpeedSlider.value = npc.visualizationSpeed;
+            UpdateSpeedValueText(npc.visualizationSpeed);
+        }
+
+        if (visualizationBatchSlider != null)
+        {
+            visualizationBatchSlider.value = npc.visualizationBatch;
+            UpdateBatchValueText(npc.visualizationBatch);
+        }
+    }
+
+    private void OnVisualizationSpeedChanged(float newValue)
+    {
+        npc.visualizationSpeed = newValue;
+        UpdateSpeedValueText(newValue);
+    }
+
+    private void OnVisualizationBatchChanged(float newValue)
+    {
+        // Pastikan nilai batch adalah integer
+        int batchValue = Mathf.RoundToInt(newValue);
+        npc.visualizationBatch = batchValue;
+        UpdateBatchValueText(batchValue);
+    }
+
+    private void OnShowVisualizationChanged(bool isOn)
+    {
+        npc.showVisualization = isOn;
+    }
+
+    private void UpdateSpeedValueText(float value)
+    {
+        if (speedValueText != null)
+        {
+            speedValueText.text = value.ToString("F2") + "s";
+        }
+    }
+
+    private void UpdateBatchValueText(int value)
+    {
+        if (batchValueText != null)
+        {
+            batchValueText.text = value.ToString();
+        }
+    }
+
+    /// <summary>
+    /// Menangani perubahan toggle diagonal movement
+    /// </summary>
+    private void OnDiagonalMovementChanged(bool isOn)
+    {
+        gridMap.AllowDiagonalMovement = isOn;
+        // Reset performance metrics
+        ClearPerformanceMetrics();
     }
 }
