@@ -233,7 +233,7 @@ public class PathfindingUIManager : MonoBehaviour
         algorithmDropdown.AddOptions(new System.Collections.Generic.List<string> {
             "A*",
             "Dijkstra",
-            "Greedy Best-First",
+            "Greedy BFS",
             "Backtracking",
             "BFS"
         });
@@ -565,7 +565,7 @@ public class PathfindingUIManager : MonoBehaviour
     {
         if (speedValueText != null)
         {
-            speedValueText.text = value.ToString("F2") + "s";
+            speedValueText.text = value.ToString("F1") + "s";
         }
     }
 
