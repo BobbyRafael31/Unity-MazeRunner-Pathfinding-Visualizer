@@ -490,12 +490,30 @@ public class GridMap : MonoBehaviour
     }
 
     /// <summary>
+    /// Simple class to store grid positions for serialization
+    /// </summary>
+    [System.Serializable]
+    public class SerializablePosition
+    {
+        public float x;
+        public float y;
+
+        public SerializablePosition(float x, float y)
+        {
+            this.x = x;
+            this.y = y;
+        }
+    }
+
+    /// <summary>
     /// Kelas untuk menyimpan status grid untuk keperluan save/load
     /// </summary>
     [System.Serializable]
     public class GridState
     {
         public bool[,] walkableStates;
+        public SerializablePosition npcPosition;      // Position of NPC
+        public SerializablePosition destinationPosition; // Position of destination
     }
 
     /// <summary>
@@ -525,15 +543,33 @@ public class GridMap : MonoBehaviour
                 }
             }
 
+            // Save NPC position using our serializable class
+            gridState.npcPosition = new SerializablePosition(
+                npc.transform.position.x / GridNodeWidth,
+                npc.transform.position.y / GridNodeHeight
+            );
+
+            // Save destination position using our serializable class
+            gridState.destinationPosition = new SerializablePosition(
+                destination.position.x / GridNodeWidth,
+                destination.position.y / GridNodeHeight
+            );
+
+            // Configure serializer settings to ignore Unity-specific circular references
+            JsonSerializerSettings settings = new JsonSerializerSettings
+            {
+                ReferenceLoopHandling = ReferenceLoopHandling.Ignore
+            };
+
             // Mengkonversi ke JSON dan menyimpan ke file
-            string json = JsonConvert.SerializeObject(gridState);
+            string json = JsonConvert.SerializeObject(gridState, settings);
             File.WriteAllText(filePath, json);
 
-            //Debug.Log($"Grid state saved to {filePath}");
+            Debug.Log($"Grid state saved to {filePath}");
         }
         catch (System.Exception e)
         {
-            //Debug.LogError($"Error saving grid state: {e.Message}");
+            Debug.LogError($"Error saving grid state: {e.Message}");
         }
     }
 
@@ -547,19 +583,26 @@ public class GridMap : MonoBehaviour
         {
             if (!File.Exists(filePath))
             {
-                //Debug.LogError($"Save file not found: {filePath}");
+                Debug.LogError($"Save file not found: {filePath}");
                 return;
             }
 
             // Membaca dan mengkonversi data dari file JSON
             string json = File.ReadAllText(filePath);
-            GridState gridState = JsonConvert.DeserializeObject<GridState>(json);
+            
+            // Configure deserializer settings to handle missing properties (compatibility)
+            JsonSerializerSettings settings = new JsonSerializerSettings
+            {
+                MissingMemberHandling = MissingMemberHandling.Ignore
+            };
+            
+            GridState gridState = JsonConvert.DeserializeObject<GridState>(json, settings);
 
             // Periksa apakah ukuran grid dalam file sesuai dengan grid saat ini
             if (gridState.walkableStates.GetLength(0) != numX ||
                 gridState.walkableStates.GetLength(1) != numY)
             {
-                //Debug.LogWarning($"Grid size mismatch. File: {gridState.walkableStates.GetLength(0)}x{gridState.walkableStates.GetLength(1)}, Current: {numX}x{numY}. Resizing grid...");
+                Debug.LogWarning($"Grid size mismatch. File: {gridState.walkableStates.GetLength(0)}x{gridState.walkableStates.GetLength(1)}, Current: {numX}x{numY}. Resizing grid...");
                 ResizeGrid(gridState.walkableStates.GetLength(0), gridState.walkableStates.GetLength(1));
             }
 
@@ -573,11 +616,82 @@ public class GridMap : MonoBehaviour
                 }
             }
 
-            //Debug.Log($"Grid state loaded from {filePath}");
+            // Check if this is an older save file version (backward compatibility)
+            bool hasPositionData = gridState.npcPosition != null && gridState.destinationPosition != null;
+
+            // Load NPC position if saved
+            if (npc != null)
+            {
+                if (hasPositionData)
+                {
+                    // Find the closest valid grid node position
+                    int npcX = Mathf.Clamp(Mathf.RoundToInt(gridState.npcPosition.x), 0, numX - 1);
+                    int npcY = Mathf.Clamp(Mathf.RoundToInt(gridState.npcPosition.y), 0, numY - 1);
+                    
+                    // Make sure the position is walkable
+                    GridNode npcNode = GetGridNode(npcX, npcY);
+                    if (npcNode != null && npcNode.IsWalkable)
+                    {
+                        // Set NPC position
+                        npc.SetStartNode(npcNode);
+                    }
+                    else
+                    {
+                        // Find a walkable node if the saved position isn't walkable
+                        FindWalkableNodeAndSetNPC();
+                    }
+                }
+                else
+                {
+                    // For older save files, find a walkable position
+                    FindWalkableNodeAndSetNPC();
+                }
+            }
+
+            // Load destination position if saved
+            if (destination != null)
+            {
+                if (hasPositionData)
+                {
+                    // Find the closest valid grid node position
+                    int destX = Mathf.Clamp(Mathf.RoundToInt(gridState.destinationPosition.x), 0, numX - 1);
+                    int destY = Mathf.Clamp(Mathf.RoundToInt(gridState.destinationPosition.y), 0, numY - 1);
+                    
+                    // Set destination position
+                    SetDestination(destX, destY);
+                }
+                else
+                {
+                    // For older save files, set destination to the opposite corner or a walkable node
+                    FindWalkableNodeAndSetDestination();
+                }
+            }
+
+            Debug.Log($"Grid state loaded from {filePath}");
         }
         catch (System.Exception e)
         {
-            //Debug.LogError($"Error loading grid state: {e.Message}");
+            Debug.LogError($"Error loading grid state: {e.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Find a walkable node and set the NPC position to it
+    /// </summary>
+    private void FindWalkableNodeAndSetNPC()
+    {
+        // Find first walkable node
+        for (int i = 0; i < numX; i++)
+        {
+            for (int j = 0; j < numY; j++)
+            {
+                GridNode node = GetGridNode(i, j);
+                if (node != null && node.IsWalkable)
+                {
+                    npc.SetStartNode(node);
+                    return;
+                }
+            }
         }
     }
 
@@ -1006,5 +1120,47 @@ public class GridMap : MonoBehaviour
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Find a walkable node and set the destination position to it
+    /// </summary>
+    private void FindWalkableNodeAndSetDestination()
+    {
+        // Try to place destination in the far corner from the NPC
+        int npcX = (int)(npc.transform.position.x / GridNodeWidth);
+        int npcY = (int)(npc.transform.position.y / GridNodeHeight);
+        
+        // Try opposite corner first
+        int destX = numX - 1;
+        int destY = numY - 1;
+        
+        GridNode destinationNode = GetGridNode(destX, destY);
+        if (destinationNode != null && destinationNode.IsWalkable)
+        {
+            SetDestination(destX, destY);
+            return;
+        }
+        
+        // If the opposite corner isn't walkable, find any walkable node that's different from NPC position
+        for (int i = numX - 1; i >= 0; i--)
+        {
+            for (int j = numY - 1; j >= 0; j--)
+            {
+                // Skip the node where NPC is
+                if (i == npcX && j == npcY)
+                    continue;
+                    
+                GridNode node = GetGridNode(i, j);
+                if (node != null && node.IsWalkable)
+                {
+                    SetDestination(i, j);
+                    return;
+                }
+            }
+        }
+        
+        // If no suitable node found, use the NPC node as a fallback
+        SetDestination(npcX, npcY);
     }
 }

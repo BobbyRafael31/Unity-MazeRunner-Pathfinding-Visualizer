@@ -254,6 +254,9 @@ public class NPC : MonoBehaviour
         // Pre-allocate visualizationSteps with estimated capacity to avoid reallocations
         visualizationSteps = new List<PathfindingVisualizationStep>(4);
 
+        GC.Collect();
+        GC.WaitForPendingFinalizers(); // Tunggu semua finalizers selesai
+
         // ===== MEMORY MEASUREMENT START: Ukur memory sebelum algoritma =====
         long memoryBefore = System.GC.GetTotalMemory(false);
 
@@ -280,6 +283,13 @@ public class NPC : MonoBehaviour
         // ===== MEMORY MEASUREMENT END: Ukur memory setelah algoritma =====
         long memoryAfter = System.GC.GetTotalMemory(false);
         long memoryUsed = memoryAfter - memoryBefore;
+
+        // float miliseconds = algorithmTimer.ElapsedMilliseconds;
+
+        //UnityEngine.Debug.Log("$algorithmTimer.ElapsedTicks: " + algorithmTimer.ElapsedTicks);
+        //UnityEngine.Debug.Log("$Stopwatch.Frequency: " + Stopwatch.Frequency);
+        //float seconds = (float)algorithmTimer.ElapsedTicks / Stopwatch.Frequency;
+        //UnityEngine.Debug.Log("$seconds: " + seconds);
 
         float milliseconds = (algorithmTimer.ElapsedTicks * 1000.0f) / Stopwatch.Frequency;
 
@@ -327,7 +337,7 @@ public class NPC : MonoBehaviour
         yield return null;
     }
 
-
+    
     /// <summary>
     /// Setup callbacks for tracking nodes in open/closed lists and visualization
     /// </summary>

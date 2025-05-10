@@ -336,7 +336,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 52.600037, y: 49.700073}
+  m_AnchoredPosition: {x: 52.600098, y: 49.700073}
   m_SizeDelta: {x: 81.71, y: 19.77002}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &23184662
@@ -1684,7 +1684,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 1, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: -13.392517, y: 0}
+  m_AnchoredPosition: {x: -13.392578, y: 0}
   m_SizeDelta: {x: 26.785, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &249188175
@@ -7311,8 +7311,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 42bfb8854d690bf4fa7ccf911313d0ae, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  numX: 20
-  numY: 20
+  numX: 10
+  numY: 10
   gridNodeViewPrefab: {fileID: 5382759684804752574, guid: bfa28317eb98f2846969e3ffce05f685, type: 3}
   allowDiagonalMovement: 0
   COLOR_WALKABLE: {r: 1, g: 1, b: 1, a: 1}

@@ -374,7 +374,7 @@ public class PathfindingUIManager : MonoBehaviour
         string filePath = Path.Combine(saveDirectory, $"{mapNameInput.text}.json");
         gridMap.SaveGridState(filePath);
 
-        Debug.Log($"Map saved to: {filePath}");
+        Debug.Log($"Map saved to: {filePath} (includes grid state, NPC position, and destination position)");
     }
 
     /// <summary>
