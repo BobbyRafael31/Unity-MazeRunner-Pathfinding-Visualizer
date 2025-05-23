@@ -1360,7 +1360,8 @@ namespace PathFinding
     #region Breath-First Search Algorithm
     /// <summary>
     /// Implementasi algoritma Breadth-First Search (BFS)
-    /// Algoritma ini menjelajahi semua node pada jarak yang sama dari titik awal sebelum bergerak ke node yang lebih jauh
+    /// Algoritma ini menjelajahi semua node pada jarak yang sama dari 
+    /// titik awal sebelum bergerak ke node yang lebih jauh
     /// </summary>
     /// <typeparam name="T">Tipe data nilai yang disimpan dalam node</typeparam>
     public class BFSPathFinder<T> : PathFinder<T>

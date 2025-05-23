@@ -1,7 +1,9 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
-using System.Collections;
 using System.IO;
 
 public class PathfindingUIManager : MonoBehaviour
@@ -52,8 +54,22 @@ public class PathfindingUIManager : MonoBehaviour
     public TMP_Dropdown mazeSizeDropdown;
     public TMP_Dropdown mazeDensityDropdown;
 
+    [Header("Automated Testing")]
+    [SerializeField] private GameObject testerPanelPrefab;
+    [SerializeField] private Transform testerPanelParent;
+    private GameObject testerPanelInstance;
+
     // Konstanta untuk perhitungan CPU usage
     private const float TARGET_FRAME_TIME_MS = 16.67f; // 60 FPS = 16.67ms per frame
+
+    // Add a flag to track if pathfinding is running
+    private bool isPathfindingRunning = false;
+
+    // Add a flag to track if visualization is running
+    private bool isVisualizationRunning = false;
+
+    // Add a flag to track if NPC is moving
+    private bool isNpcMoving = false;
 
     private void Start()
     {
@@ -91,6 +107,13 @@ public class PathfindingUIManager : MonoBehaviour
 
         // Subscribe to NPC's pathfinding events
         npc.OnPathfindingComplete += UpdatePerformanceMetrics;
+        npc.OnPathfindingComplete += OnPathfindingCompleted;
+
+        // Subscribe to visualization completion event
+        npc.OnVisualizationComplete += OnVisualizationCompleted;
+
+        // Subscribe to movement completion event
+        npc.OnMovementComplete += OnMovementCompleted;
 
         // Initialize performance metrics
         ClearPerformanceMetrics();
@@ -213,6 +236,9 @@ public class PathfindingUIManager : MonoBehaviour
         if (npc != null)
         {
             npc.OnPathfindingComplete -= UpdatePerformanceMetrics;
+            npc.OnPathfindingComplete -= OnPathfindingCompleted;
+            npc.OnVisualizationComplete -= OnVisualizationCompleted;
+            npc.OnMovementComplete -= OnMovementCompleted;
         }
 
         // Unsubscribe from UI events
@@ -227,6 +253,14 @@ public class PathfindingUIManager : MonoBehaviour
         // Set initial values
         gridSizeXInput.text = gridMap.NumX.ToString();
         gridSizeYInput.text = gridMap.NumY.ToString();
+
+        // Set input fields to only accept integers
+        gridSizeXInput.contentType = TMP_InputField.ContentType.IntegerNumber;
+        gridSizeYInput.contentType = TMP_InputField.ContentType.IntegerNumber;
+
+        // Add input validation events
+        gridSizeXInput.onValidateInput += ValidateNumberInput;
+        gridSizeYInput.onValidateInput += ValidateNumberInput;
 
         // Setup algorithm dropdown
         algorithmDropdown.ClearOptions();
@@ -268,6 +302,20 @@ public class PathfindingUIManager : MonoBehaviour
         }
 
         ClearPerformanceMetrics();
+    }
+
+    // Validation function to only allow numeric input
+    private char ValidateNumberInput(string text, int charIndex, char addedChar)
+    {
+        // Only allow digits
+        if (char.IsDigit(addedChar))
+        {
+            return addedChar;
+        }
+        else
+        {
+            return '\0'; // Return null character to reject the input
+        }
     }
 
     private void ClearPerformanceMetrics()
@@ -312,8 +360,42 @@ public class PathfindingUIManager : MonoBehaviour
         if (int.TryParse(gridSizeXInput.text, out int newSizeX) &&
             int.TryParse(gridSizeYInput.text, out int newSizeY))
         {
-            gridMap.ResizeGrid(newSizeX, newSizeY);
-            ClearPerformanceMetrics();
+            // Validate grid size limits
+            const int MAX_GRID_SIZE = 200;
+            const int MIN_GRID_SIZE = 2;
+
+            if (newSizeX > MAX_GRID_SIZE || newSizeY > MAX_GRID_SIZE)
+            {
+                // Display an error message
+                Debug.LogWarning($"Grid size cannot exceed {MAX_GRID_SIZE}x{MAX_GRID_SIZE}. Resize operation cancelled.");
+
+                // Revert input fields to current grid size
+                gridSizeXInput.text = gridMap.NumX.ToString();
+                gridSizeYInput.text = gridMap.NumY.ToString();
+
+                // Don't proceed with resize
+                return;
+            }
+
+            // Check for minimum size
+            if (newSizeX < MIN_GRID_SIZE || newSizeY < MIN_GRID_SIZE)
+            {
+                // Display an error message
+                Debug.LogWarning($"Grid size cannot be less than {MIN_GRID_SIZE}x{MIN_GRID_SIZE}. Resize operation cancelled.");
+
+                // Revert input fields to current grid size
+                gridSizeXInput.text = gridMap.NumX.ToString();
+                gridSizeYInput.text = gridMap.NumY.ToString();
+
+                // Don't proceed with resize
+                return;
+            }
+
+            // Apply the grid size (only if within limits)
+            if (gridMap.ResizeGrid(newSizeX, newSizeY))
+            {
+                ClearPerformanceMetrics();
+            }
         }
     }
 
@@ -336,12 +418,28 @@ public class PathfindingUIManager : MonoBehaviour
         if (startNode != null && endNode != null)
         {
             ClearPerformanceMetrics();
+
+            // Set flags that pathfinding, visualization, and movement will happen
+            isPathfindingRunning = true;
+            isVisualizationRunning = true;
+            isNpcMoving = true;  // assume movement will happen
+            SetUIInteractivity(false);
+
             npc.MoveTo(endNode);
         }
     }
 
     private void OnResetPathfinding()
     {
+        // Reset all flags to ensure UI will be enabled after reload
+        isPathfindingRunning = false;
+        isVisualizationRunning = false;
+        isNpcMoving = false;
+
+        // Force enable UI - this ensures buttons will be enabled
+        // after reset regardless of editor/build status
+        SetUIInteractivity(true);
+
         // Reload the current scene
         UnityEngine.SceneManagement.SceneManager.LoadScene(
             UnityEngine.SceneManagement.SceneManager.GetActiveScene().name);
@@ -352,8 +450,32 @@ public class PathfindingUIManager : MonoBehaviour
     private void OnAlgorithmChanged(int index)
     {
         NPC.PathFinderType newType = (NPC.PathFinderType)index;
+        string algorithmName = GetAlgorithmName(newType);
+
+        Debug.Log($"Algorithm changed - Index: {index}, Type: {newType}, Name: {algorithmName}");
+
         npc.ChangeAlgorithm(newType);
         ClearPerformanceMetrics();
+    }
+
+    // Helper method to get the readable name of the algorithm
+    private string GetAlgorithmName(NPC.PathFinderType type)
+    {
+        switch (type)
+        {
+            case NPC.PathFinderType.ASTAR:
+                return "A*";
+            case NPC.PathFinderType.DIJKSTRA:
+                return "Dijkstra";
+            case NPC.PathFinderType.GREEDY:
+                return "Greedy BFS";
+            case NPC.PathFinderType.BACKTRACKING:
+                return "Backtracking";
+            case NPC.PathFinderType.BFS:
+                return "BFS";
+            default:
+                return "Unknown";
+        }
     }
 
     private void OnSaveMap()
@@ -426,24 +548,45 @@ public class PathfindingUIManager : MonoBehaviour
         int sizeY = 20;
         bool isLargeGrid = false;
 
+        const int MAX_GRID_SIZE = 200;
+        const int MIN_GRID_SIZE = 2;
+
         switch (mazeSizeDropdown.value)
         {
             case 0: // Kecil
                 sizeX = sizeY = 20;
                 break;
             case 1: // Sedang
-                sizeX = sizeY = 50;
+                sizeX = sizeY = 35;
                 break;
             case 2: // Besar
-                sizeX = sizeY = 100;
+                sizeX = sizeY = 50;
                 isLargeGrid = true;
                 break;
+                // If more options are added that exceed MAX_GRID_SIZE, they'll be rejected
+        }
+
+        // Check if size exceeds maximum or is below minimum - reject if it does
+        if (sizeX > MAX_GRID_SIZE || sizeY > MAX_GRID_SIZE)
+        {
+            Debug.LogWarning($"Maze size {sizeX}x{sizeY} exceeds maximum of {MAX_GRID_SIZE}x{MAX_GRID_SIZE}. Operation cancelled.");
+            return;
+        }
+
+        if (sizeX < MIN_GRID_SIZE || sizeY < MIN_GRID_SIZE)
+        {
+            Debug.LogWarning($"Maze size {sizeX}x{sizeY} is below minimum of {MIN_GRID_SIZE}x{MIN_GRID_SIZE}. Operation cancelled.");
+            return;
         }
 
         // Resize grid if needed
         if (gridMap.NumX != sizeX || gridMap.NumY != sizeY)
         {
-            gridMap.ResizeGrid(sizeX, sizeY);
+            if (!gridMap.ResizeGrid(sizeX, sizeY))
+            {
+                // Resize failed, abort maze generation
+                return;
+            }
 
             // Update grid size inputs
             gridSizeXInput.text = sizeX.ToString();
@@ -586,4 +729,196 @@ public class PathfindingUIManager : MonoBehaviour
         // Reset performance metrics
         ClearPerformanceMetrics();
     }
+
+    // New method to handle pathfinding completion
+    private void OnPathfindingCompleted(PathfindingMetrics metrics)
+    {
+        // Pathfinding is completed, but visualization might still be running
+        isPathfindingRunning = false;
+
+        // Check if pathfinding failed by looking at metrics or path length
+        bool pathfindingFailed = (metrics.pathLength == 0) ||
+                                  (npc.pathFinder != null &&
+                                  npc.pathFinder.Status == PathFinding.PathFinderStatus.FAILURE);
+
+        if (pathfindingFailed)
+        {
+            // If pathfinding failed, there won't be any visualization or movement
+            Debug.Log("Pathfinding failed - re-enabling UI controls immediately");
+            isVisualizationRunning = false;
+            isNpcMoving = false;
+
+            // Only re-enable in editor mode
+#if UNITY_EDITOR
+            SetUIInteractivity(true);
+#else
+            // In build, keep disabled
+            SetUIInteractivity(false);
+#endif
+
+            return;
+        }
+
+        // If pathfinding succeeded, continue with normal flow
+        // Very important: Keep UI disabled regardless of visualization state to prevent
+        // the brief window of interactivity between pathfinding completion and visualization start
+        if (npc.showVisualization)
+        {
+            // If visualization is enabled in settings, assume it will start soon
+            // Keep UI disabled by keeping isVisualizationRunning true
+            isVisualizationRunning = true;
+            // Do NOT enable UI here - wait for visualization to complete
+        }
+        else
+        {
+            // Only if visualization is completely disabled in settings, enable UI
+            isVisualizationRunning = false;
+
+            // Only re-enable in editor mode
+#if UNITY_EDITOR
+            SetUIInteractivity(true);
+#else
+            // In build, keep disabled
+            SetUIInteractivity(false);
+#endif
+        }
+    }
+
+    // New method to handle visualization completion
+    private void OnVisualizationCompleted()
+    {
+        // Visualization is completed, but NPC may start moving
+        isVisualizationRunning = false;
+
+        // Check if NPC is moving or will move
+        if (npc.IsMoving || npc.wayPoints.Count > 0)
+        {
+            // Movement is starting or in progress
+            isNpcMoving = true;
+            // Leave UI disabled
+        }
+        else
+        {
+            // No movement expected
+            isNpcMoving = false;
+
+            // Only re-enable in editor mode
+#if UNITY_EDITOR
+            SetUIInteractivity(true);
+#else
+            // In build, keep disabled
+            SetUIInteractivity(false);
+#endif
+        }
+    }
+
+    // New method to handle movement completion
+    private void OnMovementCompleted()
+    {
+        // Movement is completed, re-enable UI buttons only in editor
+        isNpcMoving = false;
+
+        // Only re-enable in editor mode
+#if UNITY_EDITOR
+        SetUIInteractivity(true);
+#else
+        // In build, keep disabled
+        Debug.Log("Movement complete but keeping buttons disabled in build mode");
+        SetUIInteractivity(false);
+#endif
+    }
+
+    // Method to enable/disable UI elements based on pathfinding, visualization, and movement state
+    private void SetUIInteractivity(bool enabled)
+    {
+        // If any process is running, disable controls
+        bool shouldEnable = enabled && !isPathfindingRunning && !isVisualizationRunning && !isNpcMoving;
+
+        // In builds (not editor), once disabled, buttons stay disabled until reset
+#if !UNITY_EDITOR
+        if (shouldEnable && (isPathfindingRunning || isVisualizationRunning || isNpcMoving))
+        {
+            // In builds, once pathfinding started, keep buttons disabled regardless
+            Debug.Log("In build - keeping buttons disabled even after completion");
+            shouldEnable = false;
+        }
+#endif
+
+        // Add debug logging
+        Debug.Log($"SetUIInteractivity called with enabled={enabled}, pathfinding={isPathfindingRunning}, " +
+                 $"visualization={isVisualizationRunning}, movement={isNpcMoving}, shouldEnable={shouldEnable}, " +
+                 $"inEditor={Application.isEditor}");
+
+        // Keep reset and exit buttons always enabled
+        // Disable all other buttons when processes are running
+
+        if (applyGridSizeButton != null)
+            applyGridSizeButton.interactable = shouldEnable;
+
+        if (runPathfindingButton != null)
+            runPathfindingButton.interactable = shouldEnable;
+
+        if (algorithmDropdown != null)
+            algorithmDropdown.interactable = shouldEnable;
+
+        if (allowDiagonalToggle != null)
+            allowDiagonalToggle.interactable = shouldEnable;
+
+        if (saveButton != null)
+            saveButton.interactable = shouldEnable;
+
+        if (loadButton != null)
+            loadButton.interactable = shouldEnable;
+
+        if (generateMazeButton != null)
+            generateMazeButton.interactable = shouldEnable;
+
+        if (visualizationSpeedSlider != null)
+            visualizationSpeedSlider.interactable = shouldEnable;
+
+        if (visualizationBatchSlider != null)
+            visualizationBatchSlider.interactable = shouldEnable;
+
+        if (mazeSizeDropdown != null)
+            mazeSizeDropdown.interactable = shouldEnable;
+
+        if (mazeDensityDropdown != null)
+            mazeDensityDropdown.interactable = shouldEnable;
+
+        if (gridSizeXInput != null)
+            gridSizeXInput.interactable = shouldEnable;
+
+        if (gridSizeYInput != null)
+            gridSizeYInput.interactable = shouldEnable;
+
+        if (mapNameInput != null)
+            mapNameInput.interactable = shouldEnable;
+
+        // Reset and exit buttons remain enabled
+        // resetButton and exitButton stay interactable
+    }
+
+    private void Update()
+    {
+        // Continuously check for various states - this ensures buttons stay disabled
+        if (npc != null)
+        {
+            // Check visualization
+            if (npc.IsVisualizingPath && !isVisualizationRunning)
+            {
+                Debug.Log("Detected active visualization - updating UI state");
+                isVisualizationRunning = true;
+                SetUIInteractivity(false);
+            }
+
+            // Check movement
+            if (npc.IsMoving && !isNpcMoving)
+            {
+                Debug.Log("Detected active NPC movement - updating UI state");
+                isNpcMoving = true;
+                SetUIInteractivity(false);
+            }
+        }
+    }
+
 }

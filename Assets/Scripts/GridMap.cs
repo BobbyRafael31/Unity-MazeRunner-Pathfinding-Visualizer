@@ -239,6 +239,15 @@ public class GridMap : MonoBehaviour
     /// </summary>
     public void RayCastAndSetDestination()
     {
+        // Don't allow changing destination during pathfinding, visualization, or movement
+        if (npc != null && (npc.pathFinder?.Status == PathFinding.PathFinderStatus.RUNNING || 
+                            npc.IsVisualizingPath || 
+                            npc.IsMoving))
+        {
+            // Pathfinding, visualization or movement is in progress - ignore position change
+            return;
+        }
+        
         // Konversi posisi mouse ke koordinat dunia
         Vector2 rayPos = new Vector2(
           Camera.main.ScreenToWorldPoint(Input.mousePosition).x,
@@ -291,6 +300,15 @@ public class GridMap : MonoBehaviour
     /// </summary>
     public void RayCastAndSetNPCPosition()
     {
+        // Don't allow changing NPC position during pathfinding, visualization, or movement
+        if (npc != null && (npc.pathFinder?.Status == PathFinding.PathFinderStatus.RUNNING || 
+                            npc.IsVisualizingPath || 
+                            npc.IsMoving))
+        {
+            // Pathfinding, visualization or movement is in progress - ignore position change
+            return;
+        }
+    
         // Konversi posisi mouse ke koordinat dunia
         Vector2 rayPos = new Vector2(
           Camera.main.ScreenToWorldPoint(Input.mousePosition).x,
@@ -318,6 +336,11 @@ public class GridMap : MonoBehaviour
     /// </summary>
     void Update()
     {
+        // Check if pathfinding, visualization, or movement is active
+        bool isPathfindingActive = npc != null && (npc.pathFinder?.Status == PathFinding.PathFinderStatus.RUNNING || 
+                                                 npc.IsVisualizingPath || 
+                                                 npc.IsMoving);
+    
         // Handle camera panning with middle mouse button
         if (Input.GetMouseButton(2)) // Middle mouse button
         {
@@ -336,6 +359,13 @@ public class GridMap : MonoBehaviour
 
             if (currentMousePosition != lastMousePosition)
             {
+                // If pathfinding is active, only allow camera movement, no interaction with grid
+                if (isPathfindingActive)
+                {
+                    lastMousePosition = currentMousePosition;
+                    return;
+                }
+            
                 // Menggambar dinding dengan Shift+Left Click
                 if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))
                 {
@@ -357,7 +387,10 @@ public class GridMap : MonoBehaviour
         // Menetapkan tujuan baru saat tombol kanan mouse ditekan
         if (Input.GetMouseButtonDown(1))
         {
-            RayCastAndSetDestination();
+            if (!isPathfindingActive)
+            {
+                RayCastAndSetDestination();
+            }
         }
 
         // Menyesuaikan ukuran kamera dengan scroll wheel
@@ -698,8 +731,24 @@ public class GridMap : MonoBehaviour
     /// <summary>
     /// Resizes the grid to the specified dimensions
     /// </summary>
-    public void ResizeGrid(int newSizeX, int newSizeY)
+    public bool ResizeGrid(int newSizeX, int newSizeY)
     {
+        // Enforce grid size limits
+        const int MAX_GRID_SIZE = 200;
+        const int MIN_GRID_SIZE = 2;
+        
+        if (newSizeX > MAX_GRID_SIZE || newSizeY > MAX_GRID_SIZE)
+        {
+            Debug.LogWarning($"Attempted to resize grid beyond maximum size of {MAX_GRID_SIZE}x{MAX_GRID_SIZE}. Operation cancelled.");
+            return false;
+        }
+        
+        if (newSizeX < MIN_GRID_SIZE || newSizeY < MIN_GRID_SIZE)
+        {
+            Debug.LogWarning($"Attempted to resize grid below minimum size of {MIN_GRID_SIZE}x{MIN_GRID_SIZE}. Operation cancelled.");
+            return false;
+        }
+        
         // Clean up existing grid
         if (gridNodeViews != null)
         {
@@ -749,6 +798,8 @@ public class GridMap : MonoBehaviour
         {
             npc.SetStartNode(gridNodeViews[0, 0].Node);
         }
+        
+        return true;
     }
 
     /// <summary>
@@ -771,7 +822,53 @@ public class GridMap : MonoBehaviour
     /// <param name="wallDensity">Kepadatan dinding dalam persen (0-100), mempengaruhi rasio jalur terhadap ruang terbuka</param>
     public void GenerateRandomMaze(float density = 35f)
     {
-        // Use the recursive backtracking maze generation
+        // Handle special cases for 0% and 100% density
+        if (density <= 0f)
+        {
+            // Make all cells walkable (no walls)
+            for (int x = 0; x < numX; x++)
+            {
+                for (int y = 0; y < numY; y++)
+                {
+                    GridNode node = GetGridNode(x, y);
+                    if (node != null)
+                    {
+                        node.IsWalkable = true;
+                        GridNodeView gnv = GetGridNodeView(x, y);
+                        if (gnv != null)
+                        {
+                            gnv.SetInnerColor(COLOR_WALKABLE);
+                        }
+                    }
+                }
+            }
+            return;
+        }
+        else if (density >= 100f)
+        {
+            // Make all cells non-walkable (all walls)
+            for (int x = 0; x < numX; x++)
+            {
+                for (int y = 0; y < numY; y++)
+                {
+                    GridNode node = GetGridNode(x, y);
+                    if (node != null)
+                    {
+                        node.IsWalkable = false;
+                        GridNodeView gnv = GetGridNodeView(x, y);
+                        if (gnv != null)
+                        {
+                            gnv.SetInnerColor(COLOR_NONWALKABLE);
+                        }
+                    }
+                }
+            }
+            
+            // No path creation - truly 100% blocked
+            return;
+        }
+        
+        // Use the recursive backtracking maze generation for normal density values
         GenerateRecursiveBacktrackingMaze(density);
     }
 

@@ -21,17 +21,26 @@ public struct PathfindingMetrics
     public float totalGCost;    // Total biaya G untuk jalur (jarak sebenarnya)
     public float totalHCost;    // Total biaya H untuk jalur (heuristik)
     public float totalFCost;    // Total biaya F untuk jalur (G + H)
-
 }
 
+/// <summary>
+/// NPC adalah komponen utama yang mengelola pergerakan NPC dalam sistem pathfinding.
+/// Kelas ini bertanggung jawab untuk membuat, menampilkan, dan mengelola jalur untuk NPC.
+/// </summary>
 public class NPC : MonoBehaviour
 {
     public float speed = 2.0f;
     public Queue<Vector2> wayPoints = new Queue<Vector2>();
-
+    
     // Event that fires when pathfinding is complete with performance metrics
     public event Action<PathfindingMetrics> OnPathfindingComplete;
 
+    // Last measured memory usage (for accessing from outside)
+    public long LastMeasuredMemoryUsage { get; private set; } = 0;
+
+    /// <summary>
+    /// Enumerasi yang merepresentasikan berbagai algoritma pathfinding yang tersedia.
+    /// </summary>
     public enum PathFinderType
     {
         ASTAR,
@@ -44,13 +53,26 @@ public class NPC : MonoBehaviour
     [SerializeField]
     public PathFinderType pathFinderType = PathFinderType.ASTAR;
 
-    PathFinder<Vector2Int> pathFinder = null;
+    public PathFinder<Vector2Int> pathFinder = null;
 
     public GridMap Map { get; set; }
 
     // List to store all steps for visualization playback
     private List<PathfindingVisualizationStep> visualizationSteps = new List<PathfindingVisualizationStep>();
     private bool isVisualizingPath = false;
+    private bool isMoving = false;
+    
+    // Public accessor for visualization state
+    public bool IsVisualizingPath => isVisualizingPath;
+    
+    // Public accessor for movement state
+    public bool IsMoving => isMoving;
+    
+    // Event that fires when visualization is complete
+    public event Action OnVisualizationComplete;
+    
+    // Event that fires when movement is complete
+    public event Action OnMovementComplete;
 
     // Properties to control visualization
     [SerializeField]
@@ -110,11 +132,27 @@ public class NPC : MonoBehaviour
         {
             while (wayPoints.Count > 0)
             {
+                // Set the moving flag when starting to move
+                if (!isMoving && wayPoints.Count > 0)
+                {
+                    isMoving = true;
+                    UnityEngine.Debug.Log("NPC movement started");
+                }
+                
                 yield return StartCoroutine(
                   Coroutine_MoveToPoint(
                     wayPoints.Dequeue(),
                     speed));
             }
+            
+            // If we were moving but now have no more waypoints, signal movement completion
+            if (isMoving && wayPoints.Count == 0)
+            {
+                isMoving = false;
+                UnityEngine.Debug.Log("NPC movement complete, invoking OnMovementComplete event");
+                OnMovementComplete?.Invoke();
+            }
+            
             yield return null;
         }
     }
@@ -236,8 +274,10 @@ public class NPC : MonoBehaviour
     {
         yield return StartCoroutine(MeasurePerformance(silentMode));
 
-        // Start visualization after calculation is complete
-        if (pathFinder.Status == PathFinderStatus.SUCCESS && showVisualization && !silentMode)
+        // Start visualization after calculation is complete regardless of success or failure
+        // This allows visualization of the explored area even when no path is found
+        if (showVisualization && !silentMode && 
+            (pathFinder.Status == PathFinderStatus.SUCCESS || pathFinder.Status == PathFinderStatus.FAILURE))
         {
             yield return StartCoroutine(VisualizePathfinding());
         }
@@ -254,8 +294,8 @@ public class NPC : MonoBehaviour
         // Pre-allocate visualizationSteps with estimated capacity to avoid reallocations
         visualizationSteps = new List<PathfindingVisualizationStep>(4);
 
-        GC.Collect();
-        GC.WaitForPendingFinalizers(); // Tunggu semua finalizers selesai
+        //GC.Collect(2, GCCollectionMode.Forced, true, true);
+        //GC.WaitForPendingFinalizers(); // Tunggu semua finalizers selesai
 
         // ===== MEMORY MEASUREMENT START: Ukur memory sebelum algoritma =====
         long memoryBefore = System.GC.GetTotalMemory(false);
@@ -284,13 +324,9 @@ public class NPC : MonoBehaviour
         long memoryAfter = System.GC.GetTotalMemory(false);
         long memoryUsed = memoryAfter - memoryBefore;
 
-        // float miliseconds = algorithmTimer.ElapsedMilliseconds;
-
-        //UnityEngine.Debug.Log("$algorithmTimer.ElapsedTicks: " + algorithmTimer.ElapsedTicks);
-        //UnityEngine.Debug.Log("$Stopwatch.Frequency: " + Stopwatch.Frequency);
-        //float seconds = (float)algorithmTimer.ElapsedTicks / Stopwatch.Frequency;
-        //UnityEngine.Debug.Log("$seconds: " + seconds);
-
+        // Store the memory usage for external access
+        LastMeasuredMemoryUsage = memoryUsed > 0 ? memoryUsed : 1024;
+        
         float milliseconds = (algorithmTimer.ElapsedTicks * 1000.0f) / Stopwatch.Frequency;
 
         // Calculate path length once and reuse
@@ -324,11 +360,9 @@ public class NPC : MonoBehaviour
             totalFCost = totalFCost,
         };
 
+        // *** IMPORTANT FIX: Always invoke the event, regardless of silent mode ***
         // Report metrics before visualization
-        if (!silentMode)
-        {
-            OnPathfindingComplete?.Invoke(metrics);
-        }
+        OnPathfindingComplete?.Invoke(metrics);
 
         // Path visualization and handling
         HandlePathFindingResult(silentMode, pathLength);
@@ -418,7 +452,6 @@ public class NPC : MonoBehaviour
     /// </summary>
     private void HandlePathFindingResult(bool silentMode, int pathLength)
     {
-
         if (pathFinder.Status == PathFinderStatus.SUCCESS)
         {
             OnSuccessPathFinding();
@@ -449,6 +482,11 @@ public class NPC : MonoBehaviour
         else if (pathFinder.Status == PathFinderStatus.FAILURE)
         {
             OnFailurePathFinding();
+            
+            // For failure case, we don't add any final path visualization steps
+            // The exploration steps (open/closed lists) are already added during the search
+            // and will be visualized to show what nodes were explored before failure
+            UnityEngine.Debug.Log($"Pathfinding failed - visualization will show {visualizationSteps.Count} exploration steps");
         }
     }
 
@@ -554,14 +592,23 @@ public class NPC : MonoBehaviour
         if (!showVisualization)
             yield break;
 
+        UnityEngine.Debug.Log("Path visualization starting");
         isVisualizingPath = true;
-
+        
         // First, ensure grid is reset
         Map.ResetGridNodeColours();
 
         // Visualize each step with a delay - use batch processing for efficiency
         int stepCount = visualizationSteps.Count;
         int batchSize = Mathf.Min(visualizationBatch, stepCount); // set higher value for faster visualization
+
+        // Detect if pathfinding failed - we'll need to know this when processing steps
+        bool pathfindingFailed = pathFinder.Status == PathFinderStatus.FAILURE;
+        
+        if (pathfindingFailed)
+        {
+            UnityEngine.Debug.Log($"Visualizing failed pathfinding attempt with {stepCount} steps");
+        }
 
         for (int i = 0; i < stepCount; i += batchSize)
         {
@@ -587,8 +634,8 @@ public class NPC : MonoBehaviour
                             break;
                         case PathfindingVisualizationStep.StepType.FinalPath:
                             gnv.SetInnerColor(Map.COLOR_PATH);
-                            // Also add the waypoint when we process the path
-                            if (step.type == PathfindingVisualizationStep.StepType.FinalPath)
+                            // Only add waypoints for successful pathfinding
+                            if (!pathfindingFailed)
                             {
                                 GridNode pathNode = Map.GetGridNode(step.position.x, step.position.y);
                                 AddWayPoint(pathNode);
@@ -603,6 +650,9 @@ public class NPC : MonoBehaviour
         }
 
         isVisualizingPath = false;
+        UnityEngine.Debug.Log("Path visualization complete, invoking OnVisualizationComplete event");
+        // Notify any listeners that visualization is complete
+        OnVisualizationComplete?.Invoke();
     }
 
     /// <summary>
