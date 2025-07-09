@@ -5161,8 +5161,8 @@ MonoBehaviour:
   saveButton: {fileID: 23184662}
   loadButton: {fileID: 332997445}
   exitButton: {fileID: 1403363528}
-  performWarmup: 1
-  showWarmupMessage: 1
+  performWarmup: 0
+  showWarmupMessage: 0
   mazeSizeDropdown: {fileID: 770082012}
   mazeDensityDropdown: {fileID: 1448650261}
   testerPanelPrefab: {fileID: 0}

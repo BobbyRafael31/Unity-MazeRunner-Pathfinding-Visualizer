@@ -286,7 +286,9 @@ public class PathfindingUIManager : MonoBehaviour
             mazeSizeDropdown.AddOptions(new System.Collections.Generic.List<string> {
                 "Small",
                 "Medium",
-                "Big"
+                "Big",
+                "Very Big"
+
             });
         }
 
@@ -561,6 +563,10 @@ public class PathfindingUIManager : MonoBehaviour
                 break;
             case 2: // Besar
                 sizeX = sizeY = 50;
+                isLargeGrid = true;
+                break;
+            case 3: // Sangat Besar
+                sizeX = sizeY = 100;
                 isLargeGrid = true;
                 break;
                 // If more options are added that exceed MAX_GRID_SIZE, they'll be rejected
