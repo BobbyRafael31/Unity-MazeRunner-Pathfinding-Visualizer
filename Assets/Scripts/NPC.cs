@@ -5,19 +5,20 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using UnityEngine;
 
+/// <summary>
+/// Metrik yang digunakan untuk mengukur performa pathfinding.
+/// Dibuat dalam bentuk struct untuk efisiensi memori dan kemudahan penggunaan.
+/// </summary>
 public struct PathfindingMetrics
 {
-    // Untuk Pengukuran Kinerja
-    public float timeTaken;      // in milliseconds
+    public float timeTaken;      // miliseconds
     public int pathLength;
-    public int nodesExplored; // number of nodes in path
-    public long memoryUsed;     // memory used by pathfinding in bytes
+    public int nodesExplored;
+    public long memoryUsed;     // bytes
 
-    // Untuk Visualisasi
-    public int maxOpenListSize; // maximum size of open list during pathfinding
-    public int maxClosedListSize; // maximum size of closed list during pathfinding
+    public int maxOpenListSize;
+    public int maxClosedListSize;
 
-    // Tambahan untuk cost metrics
     public float totalGCost;    // Total biaya G untuk jalur (jarak sebenarnya)
     public float totalHCost;    // Total biaya H untuk jalur (heuristik)
     public float totalFCost;    // Total biaya F untuk jalur (G + H)
@@ -31,16 +32,10 @@ public class NPC : MonoBehaviour
 {
     public float speed = 2.0f;
     public Queue<Vector2> wayPoints = new Queue<Vector2>();
-    
-    // Event that fires when pathfinding is complete with performance metrics
-    public event Action<PathfindingMetrics> OnPathfindingComplete;
 
-    // Last measured memory usage (for accessing from outside)
+    public event Action<PathfindingMetrics> OnPathfindingComplete;
     public long LastMeasuredMemoryUsage { get; private set; } = 0;
 
-    /// <summary>
-    /// Enumerasi yang merepresentasikan berbagai algoritma pathfinding yang tersedia.
-    /// </summary>
     public enum PathFinderType
     {
         ASTAR,
@@ -57,36 +52,21 @@ public class NPC : MonoBehaviour
 
     public GridMap Map { get; set; }
 
-    // List to store all steps for visualization playback
     private List<PathfindingVisualizationStep> visualizationSteps = new List<PathfindingVisualizationStep>();
     private bool isVisualizingPath = false;
     private bool isMoving = false;
-    
-    // Public accessor for visualization state
+
     public bool IsVisualizingPath => isVisualizingPath;
-    
-    // Public accessor for movement state
     public bool IsMoving => isMoving;
-    
-    // Event that fires when visualization is complete
+
     public event Action OnVisualizationComplete;
-    
-    // Event that fires when movement is complete
     public event Action OnMovementComplete;
 
-    // Properties to control visualization
-    [SerializeField]
+    public float visualizationSpeed = 0.0f;
+    public int visualizationBatch = 1;
 
-    // Visualization speed is time between visualization steps
-    public float visualizationSpeed = 0.0f; // Default 0; set higher for slower visualization
+    public bool showVisualization = true;
 
-    // Visualization batch is the number of steps to visualize at once
-    public int visualizationBatch = 1; // Default 1; set higher value for faster visualization
-
-    [SerializeField]
-    public bool showVisualization = true; // Whether to show visualization at all
-
-    // Struct to store each step of the pathfinding process for visualization
     private struct PathfindingVisualizationStep
     {
         public enum StepType { CurrentNode, OpenList, ClosedList, FinalPath }
@@ -132,27 +112,25 @@ public class NPC : MonoBehaviour
         {
             while (wayPoints.Count > 0)
             {
-                // Set the moving flag when starting to move
                 if (!isMoving && wayPoints.Count > 0)
                 {
                     isMoving = true;
                     UnityEngine.Debug.Log("NPC movement started");
                 }
-                
+
                 yield return StartCoroutine(
                   Coroutine_MoveToPoint(
                     wayPoints.Dequeue(),
                     speed));
             }
-            
-            // If we were moving but now have no more waypoints, signal movement completion
+
             if (isMoving && wayPoints.Count == 0)
             {
                 isMoving = false;
                 UnityEngine.Debug.Log("NPC movement complete, invoking OnMovementComplete event");
                 OnMovementComplete?.Invoke();
             }
-            
+
             yield return null;
         }
     }
@@ -163,7 +141,6 @@ public class NPC : MonoBehaviour
           node.Value.x * Map.GridNodeWidth,
           node.Value.y * Map.GridNodeHeight));
 
-        // We set a color to show the path.
         GridNodeView gnv = Map.GetGridNodeView(node.Value.x, node.Value.y);
         gnv.SetInnerColor(Map.COLOR_PATH);
     }
@@ -179,26 +156,20 @@ public class NPC : MonoBehaviour
 
     private void Start()
     {
-        // Initialize pathfinder based on type
         InitializePathFinder();
-
-        // Start the movement coroutine
         StartCoroutine(Coroutine_MoveTo());
     }
 
     private void InitializePathFinder()
     {
-        // Hitung perkiraan jumlah node dalam grid
         int estimatedNodeCount = 0;
         if (Map != null)
         {
             estimatedNodeCount = Map.NumX * Map.NumY;
         }
 
-        // Log informasi ukuran grid dan strategi optimisasi
         bool isLargeGrid = estimatedNodeCount > 2500;
 
-        // Create new pathfinder instance
         switch (pathFinderType)
         {
             case PathFinderType.ASTAR:
@@ -218,23 +189,19 @@ public class NPC : MonoBehaviour
                 break;
         }
 
-        // Set up callbacks
         pathFinder.onSuccess = OnSuccessPathFinding;
         pathFinder.onFailure = OnFailurePathFinding;
 
-        // Gunakan setting asli
         pathFinder.HeuristicCost = GridMap.GetManhattanCost;
         pathFinder.NodeTraversalCost = GridMap.GetEuclideanCost;
     }
 
     public void MoveTo(GridNode destination, bool silentMode = false)
     {
-        // inialisaasi pathfinder jika belum ada
         if (pathFinder == null)
         {
             InitializePathFinder();
         }
-
 
         if (pathFinder.Status == PathFinderStatus.RUNNING)
         {
@@ -252,7 +219,6 @@ public class NPC : MonoBehaviour
 
         SetStartNode(start);
 
-        // Reset grid colors
         if (!silentMode)
         {
             Map.ResetGridNodeColours();
@@ -261,7 +227,6 @@ public class NPC : MonoBehaviour
         visualizationSteps.Clear();
         isVisualizingPath = false;
 
-        // jika gagal menginisialisasi pathfinder, tidak perlu melanjutkan
         if (!pathFinder.Initialise(start, destination))
         {
             return;
@@ -274,9 +239,7 @@ public class NPC : MonoBehaviour
     {
         yield return StartCoroutine(MeasurePerformance(silentMode));
 
-        // Start visualization after calculation is complete regardless of success or failure
-        // This allows visualization of the explored area even when no path is found
-        if (showVisualization && !silentMode && 
+        if (showVisualization && !silentMode &&
             (pathFinder.Status == PathFinderStatus.SUCCESS || pathFinder.Status == PathFinderStatus.FAILURE))
         {
             yield return StartCoroutine(VisualizePathfinding());
@@ -285,71 +248,54 @@ public class NPC : MonoBehaviour
 
     IEnumerator MeasurePerformance(bool silentMode = false)
     {
-        // Memory tracking for pathfinding structures - tetap untuk visualisasi
         int maxOpenListSize = 0;
         int currentOpenListSize = 0;
         int maxClosedListSize = 0;
         int currentClosedListSize = 0;
 
-        // Pre-allocate visualizationSteps with estimated capacity to avoid reallocations
         visualizationSteps = new List<PathfindingVisualizationStep>(4);
 
-        //GC.Collect(2, GCCollectionMode.Forced, true, true);
-        //GC.WaitForPendingFinalizers(); // Tunggu semua finalizers selesai
-
-        // ===== MEMORY MEASUREMENT START: Ukur memory sebelum algoritma =====
         long memoryBefore = System.GC.GetTotalMemory(false);
 
-        // Setup callbacks before running algorithm
         SetupCallbacks(silentMode, ref maxOpenListSize, ref currentOpenListSize,
                        ref maxClosedListSize, ref currentClosedListSize);
 
-        // ===== STOPWATCH START: Pengukuran waktu algoritma =====
         Stopwatch algorithmTimer = Stopwatch.StartNew();
 
-        // Counter untuk jumlah step yang dilakukan algoritma
         int stepCount = 0;
 
-        // Execute the pathfinding algorithm synchronously in a single frame without visualization
         while (pathFinder.Status == PathFinderStatus.RUNNING)
         {
             stepCount++;
             pathFinder.Step();
         }
 
-        // ===== STOPWATCH STOP: Akhir pengukuran waktu algoritma =====
         algorithmTimer.Stop();
 
-        // ===== MEMORY MEASUREMENT END: Ukur memory setelah algoritma =====
         long memoryAfter = System.GC.GetTotalMemory(false);
         long memoryUsed = memoryAfter - memoryBefore;
 
-        // Store the memory usage for external access
         LastMeasuredMemoryUsage = memoryUsed > 0 ? memoryUsed : 1024;
-        
+
         float milliseconds = (algorithmTimer.ElapsedTicks * 1000.0f) / Stopwatch.Frequency;
 
-        // Calculate path length once and reuse
         int pathLength = 0;
         int nodesExplored = 0;
         float totalGCost = 0;
         float totalHCost = 0;
         float totalFCost = 0;
 
-        // Add memory for path reconstruction (final path)
         if (pathFinder.Status == PathFinderStatus.SUCCESS)
         {
             pathLength = CalculatePathLength();
             nodesExplored = pathFinder.ClosedListCount;
 
-            // Hitung total G, H, dan F cost
             CalculatePathCosts(out totalGCost, out totalHCost, out totalFCost);
         }
 
-        // Create and send metrics - waktu pengukuran algoritma yang tepat
         PathfindingMetrics metrics = new PathfindingMetrics
         {
-            timeTaken = milliseconds,  // Waktu algoritma yang diukur dengan stopwatch
+            timeTaken = milliseconds,
             pathLength = pathLength,
             nodesExplored = nodesExplored,
             memoryUsed = memoryUsed,
@@ -360,25 +306,20 @@ public class NPC : MonoBehaviour
             totalFCost = totalFCost,
         };
 
-        // *** IMPORTANT FIX: Always invoke the event, regardless of silent mode ***
-        // Report metrics before visualization
         OnPathfindingComplete?.Invoke(metrics);
 
-        // Path visualization and handling
         HandlePathFindingResult(silentMode, pathLength);
 
-        // Pastikan untuk mengembalikan nilai di akhir coroutine
         yield return null;
     }
 
-    
-    /// <summary>
-    /// Setup callbacks for tracking nodes in open/closed lists and visualization
-    /// </summary>
-    private void SetupCallbacks(bool silentMode, ref int maxOpenListSize, ref int currentOpenListSize,
-                               ref int maxClosedListSize, ref int currentClosedListSize)
+    private void SetupCallbacks(
+        bool silentMode,
+        ref int maxOpenListSize,
+        ref int currentOpenListSize,
+        ref int maxClosedListSize,
+        ref int currentClosedListSize)
     {
-        // Buat variabel lokal untuk menghindari masalah dengan ref parameter dalam lambda
         int localCurrentOpenListSize = currentOpenListSize;
         int localMaxOpenListSize = maxOpenListSize;
         int localCurrentClosedListSize = currentClosedListSize;
@@ -386,7 +327,6 @@ public class NPC : MonoBehaviour
 
         if (silentMode)
         {
-            // In silent mode, just set minimal callbacks for metrics
             pathFinder.onAddToOpenList = (node) =>
             {
                 localCurrentOpenListSize++;
@@ -399,12 +339,11 @@ public class NPC : MonoBehaviour
                 localCurrentClosedListSize++;
                 if (localCurrentClosedListSize > localMaxClosedListSize)
                     localMaxClosedListSize = localCurrentClosedListSize;
-                localCurrentOpenListSize--; // When a node is moved from open to closed list
+                localCurrentOpenListSize--;
             };
         }
         else
         {
-            // In regular mode, track and prepare for visualization
             pathFinder.onAddToOpenList = (node) =>
             {
                 visualizationSteps.Add(new PathfindingVisualizationStep(
@@ -426,7 +365,7 @@ public class NPC : MonoBehaviour
                 if (localCurrentClosedListSize > localMaxClosedListSize)
                     localMaxClosedListSize = localCurrentClosedListSize;
 
-                localCurrentOpenListSize--; // When a node is moved from open to closed list
+                localCurrentOpenListSize--;
             };
 
             pathFinder.onChangeCurrentNode = (node) =>
@@ -439,38 +378,29 @@ public class NPC : MonoBehaviour
 
 
         }
-
-        // Setelah lambda selesai dijalankan, perbarui variabel ref
         maxOpenListSize = localMaxOpenListSize;
         currentOpenListSize = localCurrentOpenListSize;
         maxClosedListSize = localMaxClosedListSize;
         currentClosedListSize = localCurrentClosedListSize;
     }
 
-    /// <summary>
-    /// Handle path finding result (success or failure)
-    /// </summary>
     private void HandlePathFindingResult(bool silentMode, int pathLength)
     {
         if (pathFinder.Status == PathFinderStatus.SUCCESS)
         {
             OnSuccessPathFinding();
 
-            // In non-silent mode, prepare visualization data for the path
             if (!silentMode && showVisualization)
             {
-                // Add the path nodes for visualization in efficient batched way
                 PathFinder<Vector2Int>.PathFinderNode node = pathFinder.CurrentNode;
-                List<Vector2Int> pathPositions = new List<Vector2Int>(pathLength); // Pre-allocate with known size
+                List<Vector2Int> pathPositions = new List<Vector2Int>(pathLength);
 
-                // Build path in reverse order
                 while (node != null)
                 {
                     pathPositions.Add(node.Location.Value);
                     node = node.Parent;
                 }
 
-                // Process path in correct order
                 for (int i = pathPositions.Count - 1; i >= 0; i--)
                 {
                     visualizationSteps.Add(new PathfindingVisualizationStep(
@@ -482,28 +412,9 @@ public class NPC : MonoBehaviour
         else if (pathFinder.Status == PathFinderStatus.FAILURE)
         {
             OnFailurePathFinding();
-            
-            // For failure case, we don't add any final path visualization steps
-            // The exploration steps (open/closed lists) are already added during the search
-            // and will be visualized to show what nodes were explored before failure
+
             UnityEngine.Debug.Log($"Pathfinding failed - visualization will show {visualizationSteps.Count} exploration steps");
         }
-    }
-
-    /// <summary>
-    /// Memformat ukuran byte menjadi string yang lebih mudah dibaca
-    /// </summary>
-    private string FormatBytes(long bytes)
-    {
-        string[] sizes = { "B", "KB", "MB", "GB" };
-        int order = 0;
-        double size = bytes;
-        while (size >= 1024 && order < sizes.Length - 1)
-        {
-            order++;
-            size = size / 1024;
-        }
-        return $"{size:0.##} {sizes[order]}";
     }
 
     void OnSuccessPathFinding()
@@ -512,10 +423,8 @@ public class NPC : MonoBehaviour
         float totalHCost = 0;
         float totalFCost = 0;
 
-        // Hitung biaya-biaya path menggunakan metode yang sudah ada
         CalculatePathCosts(out totalGCost, out totalHCost, out totalFCost);
 
-        // Informasi dasar
         int pathLength = CalculatePathLength();
 
     }
@@ -525,12 +434,8 @@ public class NPC : MonoBehaviour
         UnityEngine.Debug.Log("Pathfinding failed");
     }
 
-    /// <summary>
-    /// Changes the pathfinding algorithm at runtime
-    /// </summary>
     public void ChangeAlgorithm(PathFinderType newType)
     {
-        // Don't change if pathfinding is in progress
         if (pathFinder != null && pathFinder.Status == PathFinderStatus.RUNNING)
         {
             UnityEngine.Debug.Log("Cannot change algorithm while pathfinding is running");
@@ -539,14 +444,12 @@ public class NPC : MonoBehaviour
 
         pathFinderType = newType;
 
-        // Hitung perkiraan jumlah node dalam grid
         int estimatedNodeCount = 0;
         if (Map != null)
         {
             estimatedNodeCount = Map.NumX * Map.NumY;
         }
 
-        // Create new pathfinder instance
         switch (pathFinderType)
         {
             case PathFinderType.ASTAR:
@@ -566,11 +469,9 @@ public class NPC : MonoBehaviour
                 break;
         }
 
-        // Set up callbacks
         pathFinder.onSuccess = OnSuccessPathFinding;
         pathFinder.onFailure = OnFailurePathFinding;
 
-        // Gunakan setting asli
         pathFinder.HeuristicCost = GridMap.GetManhattanCost;
         pathFinder.NodeTraversalCost = GridMap.GetEuclideanCost;
     }
@@ -594,17 +495,14 @@ public class NPC : MonoBehaviour
 
         UnityEngine.Debug.Log("Path visualization starting");
         isVisualizingPath = true;
-        
-        // First, ensure grid is reset
+
         Map.ResetGridNodeColours();
 
-        // Visualize each step with a delay - use batch processing for efficiency
         int stepCount = visualizationSteps.Count;
-        int batchSize = Mathf.Min(visualizationBatch, stepCount); // set higher value for faster visualization
+        int batchSize = Mathf.Min(visualizationBatch, stepCount);
 
-        // Detect if pathfinding failed - we'll need to know this when processing steps
         bool pathfindingFailed = pathFinder.Status == PathFinderStatus.FAILURE;
-        
+
         if (pathfindingFailed)
         {
             UnityEngine.Debug.Log($"Visualizing failed pathfinding attempt with {stepCount} steps");
@@ -614,7 +512,6 @@ public class NPC : MonoBehaviour
         {
             int end = Mathf.Min(i + batchSize, stepCount);
 
-            // Process a batch of steps
             for (int j = i; j < end; j++)
             {
                 var step = visualizationSteps[j];
@@ -634,7 +531,7 @@ public class NPC : MonoBehaviour
                             break;
                         case PathfindingVisualizationStep.StepType.FinalPath:
                             gnv.SetInnerColor(Map.COLOR_PATH);
-                            // Only add waypoints for successful pathfinding
+
                             if (!pathfindingFailed)
                             {
                                 GridNode pathNode = Map.GetGridNode(step.position.x, step.position.y);
@@ -644,60 +541,39 @@ public class NPC : MonoBehaviour
                     }
                 }
             }
-
-            // Yield after each batch to prevent frame drops
             yield return new WaitForSeconds(visualizationSpeed);
         }
 
         isVisualizingPath = false;
         UnityEngine.Debug.Log("Path visualization complete, invoking OnVisualizationComplete event");
-        // Notify any listeners that visualization is complete
         OnVisualizationComplete?.Invoke();
     }
 
-    /// <summary>
-    /// Menghitung biaya G, H, dan F untuk jalur
-    /// </summary>
     private void CalculatePathCosts(out float totalGCost, out float totalHCost, out float totalFCost)
     {
-        // Inisialisasi nilai awal
         totalGCost = 0;
         totalHCost = 0;
         totalFCost = 0;
 
-        // Jika tidak ada path yang ditemukan, return nilai 0
         if (pathFinder.CurrentNode == null)
             return;
 
-        // Untuk algoritma yang menggunakan heuristik
         bool usesHeuristic = pathFinderType == PathFinderType.ASTAR ||
                             pathFinderType == PathFinderType.GREEDY;
 
-        // Node final berisi total cost jalur
         PathFinder<Vector2Int>.PathFinderNode finalNode = pathFinder.CurrentNode;
 
-        // G cost adalah biaya sebenarnya dari start ke goal, sudah terakumulasi di node akhir
         totalGCost = finalNode.GCost;
 
-        // H cost di node final idealnya 0 (sudah di tujuan), 
-        // tapi untuk info lengkap, kita dapat path's H cost dari node awal
         if (usesHeuristic)
         {
-            // H cost dari node awal ke tujuan (untuk referensi)
             totalHCost = finalNode.HCost;
-
-            // F cost adalah G + H di node akhir
             totalFCost = finalNode.FCost;
 
         }
         else
         {
-            // Algoritma tanpa heuristik (seperti Dijkstra)
             totalFCost = totalGCost;
         }
-
-        //// Hitung rata-rata biaya per langkah untuk analisis
-        //int pathLength = CalculatePathLength();
-        //float avgCostPerStep = pathLength > 0 ? totalGCost / pathLength : 0;
     }
 }

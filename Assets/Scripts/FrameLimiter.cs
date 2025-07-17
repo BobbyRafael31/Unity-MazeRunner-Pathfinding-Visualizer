@@ -2,12 +2,16 @@ using UnityEngine;
 
 public class FrameLimiter : MonoBehaviour
 {
-    // Start is called before the first frame update
+    /// <summary>
+    /// Melimit frame rate game ke 60 FPS
+    /// Limit dilakukan agar kalkulasi CPU yang digunakan sesuai dengan target FPS
+    /// </summary>
+
     [SerializeField] private int frameRate = 60;
+    private int vSyncValue = 0;
     void Start()
     {
-        // Set the target frame rate to 60
-        QualitySettings.vSyncCount = 0;
+        QualitySettings.vSyncCount = vSyncValue;
         Application.targetFrameRate = frameRate;
     }
 }
